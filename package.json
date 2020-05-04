@@ -10,8 +10,14 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "lodash": "^4.17.15",
+    "ramda": "^0.27.0",
     "react": "16.11.0",
     "react-native": "0.62.2",
+    "react-redux": "^7.2.0",
+    "redux": "^4.0.5",
+    "redux-observable": "^1.2.0",
+    "rxjs": "^6.5.5",
     "styled-components": "^5.1.0"
   },
   "devDependencies": {
