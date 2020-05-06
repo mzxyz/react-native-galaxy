@@ -28,7 +28,7 @@ Integrate `react-native debugger` into the project, then it will be easy to debu
 - [ ] The magic and power in RxJS (async actions).
 - [ ] Why it may be the best state managment library.
 - [ ] [async redux middleware comparision](https://sandstorm.de/de/blog/post/async-redux-middleware-comparison.html)
-- [ ] Common user cases, common operators.
+- [ ] Common use cases, common operators.
 
 ## 6. Using Styled Components to build UI components and pages
 
@@ -42,7 +42,7 @@ Integrate `react-native debugger` into the project, then it will be easy to debu
 - [ ] Config tips and the difference between foreground and background notification.
 - [ ] react-native-push-notification
 
-## 7. Common user cases for the third part libraries
+## 7. Common use cases for the third part libraries
 
 - [ ] react-native-camera
 - [ ] react-native-maps
