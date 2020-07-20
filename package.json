@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@react-navigation/material-top-tabs": "^5.1.15",
-    "lodash": "^4.17.15",
+    "lodash": "^4.17.19",
     "ramda": "^0.27.0",
     "react": "16.11.0",
     "react-native": "0.62.2",
