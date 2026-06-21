@@ -1,119 +1,169 @@
-# RNGalaxy
+# 🌌 RNGalaxy
 
-This is a collection of my best practice for architecting and building awesome (large, robust and maintainable) React Native App.
+> A living reference for architecting **large, robust, maintainable React Native apps** — distilled from 9 years of building and shipping mobile products.
 
-The following topics will be fully discussed in the wiki pages and explain why it's important and best practice in a React Native project.
+This repo is two things at once:
 
-## 1. Integrate `module resolver` in your app
+1. **A reference architecture** — a modern Expo app (SDK 56 · RN 0.85 · React 19 · expo-router · TypeScript, New Architecture on by default) that demonstrates how the pieces fit together.
+2. **A field guide** — each topic below has its own deep-dive in [`docs/`](./docs), focused on **tradeoffs** (the *pros and cons*), not just "how to install X".
 
-Run `yarn add babel-plugin-module-resolver` and config you alias in `babel.config.js`. Easy to solve the deep dependencies.
+The architecture overview lives right here so you can see the whole picture at a glance; each box links out to its detailed discussion.
 
-## 2. Use `react-native debugger`
+> **Companion demo apps** (built 2025, referenced throughout the docs for real code):
+> [Aussie-RN](https://github.com/mzxyz/Aussie-RN) · [ContactsApp](https://github.com/mzxyz/ContactsApp)
 
-Integrate `react-native debugger` into the project, then it will be easy to debug the actions and states. Best dev debug tool for React Native.
+---
 
-## 3. Debug the released React Native app
+## Architecture
 
-- [ ] Using Javascript dev tools in safari and set break point in bundle.js.
+I find it clearer to look at an RN app through **three separate views** rather than one giant diagram — because they run on different timelines:
 
-## 4. Deep understanding redux
+- **Runtime / boot** — what happens on every cold start.
+- **App layers & data flow** — how a running app moves data around.
+- **Delivery pipeline** — how code becomes a shipped, monitored app.
 
-- [ ] Why redux?
-- [ ] How redux works?
-- [ ] Are there any other frameworks can be used?
-- [ ] Source code analysing.
+…wrapped by a set of **cross-cutting concerns** (observability, notifications, flags, security, theming) that touch all three.
 
-## 5. Deep understing RxJS (redux-observalble)
+### 1. Runtime — cold start & boot flow
 
-- [ ] The magic and power in RxJS (async actions).
-- [ ] Why it may be the best state managment library.
-- [ ] [async redux middleware comparision](https://sandstorm.de/de/blog/post/async-redux-middleware-comparison.html)
-- [ ] Common use cases, common operators.
+From native launch to the first feature screen. The **New Architecture** (JSI · Fabric · TurboModules · Bridgeless) is the *foundation* here — it's the default in SDK 56, not a feature you bolt on. Note the multiple **entry points**: a plain launch, a notification tap, or a universal link can each route to a different screen.
 
-## 6. Using Styled Components to build UI components and pages
+```mermaid
+flowchart TD
+    OS["📱 OS launch<br/>AppDelegate / MainActivity"] --> Engine["Hermes JS engine"]
+    Engine --> Bundle["Load JS bundle<br/>Metro (dev) · Hermes bytecode (prod)"]
+    Bundle --> NewArch["New Architecture (default)<br/>JSI · Fabric · TurboModules · Bridgeless"]
+    NewArch --> Providers["Providers mount<br/>Theme · Query · Store · Flags · ErrorBoundary"]
+    Providers --> Auth{"Valid token in Keychain?<br/>OAuth 2.0 / OIDC"}
+    Auth -->|no / expired| Login["Login flow<br/>token → Keychain"]
+    Auth -->|yes| Route{"Entry point?"}
+    Login --> Route
+    Route -->|cold start| Home["🏠 Landing feature"]
+    Route -->|🔔 notification tap| Deep["Deep-link target screen"]
+    Route -->|🔗 universal link| Deep
+```
 
-- [ ] How styled-components make you UI and styles clean?
-- [ ] Comparing with style-sheet, why it is the best practice?
-- [ ] The power for styled-components to build reuseble components
+### 2. App layers & unidirectional data flow
 
-## 7. Build a notification service with Firebase
+The steady state. The key distinction is **client state** (UI/session — Zustand or Redux Toolkit) vs **server state** (cached remote data — React Query / RTK Query). Theme and i18n ride alongside via the Context API.
 
-- [ ] Using react-native-firebase and integrate firbase into Node.js to build whole a notification system
-- [ ] Config tips and the difference between foreground and background notification.
-- [ ] react-native-push-notification
+```mermaid
+flowchart LR
+    subgraph P["🎨 Presentation"]
+      Screens["Screens / Navigation<br/>expo-router"]
+      Comp["Components<br/>NativeWind / design system"]
+    end
+    subgraph S["🧠 State"]
+      Client["Client state<br/>Zustand / Redux Toolkit"]
+      Server["Server state<br/>React Query / RTK Query"]
+    end
+    subgraph D["💾 Data"]
+      API["API client<br/>fetch / axios / ky"]
+      Cache["Cache / persist<br/>MMKV · AsyncStorage"]
+    end
+    Screens --> Client
+    Screens --> Server
+    Comp --> Client
+    Server --> FX["Side effects<br/>thunks · saga · rxjs · query fns"]
+    FX --> API
+    API --> Backend[("REST / GraphQL")]
+    Client --> Cache
+    Theme(["Theme · i18n<br/>Context API"]) -.-> P
+```
 
-## 7. Common use cases for the third part libraries
+### 3. Delivery pipeline
 
-- [ ] react-native-camera
-- [ ] react-native-maps
-- [ ] react-native-device-info
-- [ ] lottie-react-native (animation)
-- [ ] react-native-vector-icons
-- [ ] react-native-permissions (have a problem when publish the app on iOS)
-- [ ] react-native-linear-gradient (provide a customized component to use it)
-- [ ] react-native-keychain
-- [ ] react-native-picker (note the different behavior on iOS and android)
-- [ ] react-native-tab-view
-- [ ] react-native-slider
-- [ ] react-native-image-picker
-- [ ] react-native-image-editor
-- [ ] react-native-blur
-- [ ] react-native-share
-- [ ] react-navigation
-- [ ] react-native-elements
-- [ ] react-native-touch-id
-- [ ] react-navigation-redux-helpers
-- [ ] redux-form
-- [ ] react-native-swiper
+How code reaches users — and how production feeds back into development via observability.
 
-## 8. Using reselct with redux
+```mermaid
+flowchart LR
+    Code["TypeScript<br/>+ lint / typecheck"] --> Test["Test<br/>Jest · RNTL · Detox / Maestro"]
+    Test --> CI["CI<br/>Bitrise · GH Actions · EAS"]
+    CI --> BuildSign["Build & sign<br/>Fastlane · EAS Build"]
+    BuildSign --> Dist["Distribute<br/>TestFlight · Play · EAS Submit"]
+    Dist --> OTA["OTA updates<br/>EAS Update"]
+    Dist --> Monitor["📡 Monitor<br/>(see cross-cutting)"]
+    Monitor -.feedback loop.-> Code
+```
 
-- [ ] Why reselct is powerful and valuble to the project?
-- [ ] How to use it?
+### Cross-cutting concerns
 
-## 9. Life time for the app and react components
+These don't sit on a single timeline — they wrap the whole app. Note **Firebase is a suite**: its Messaging product powers notifications while Crashlytics / Analytics / Performance feed observability — one vendor spanning multiple concerns.
 
-- [ ] Life time for the app (iOS, android).
-- [ ] Life time for the components.
+| Concern | Tools | Deep dive |
+|---|---|---|
+| 🔔 Notifications / Push | FCM (`@react-native-firebase/messaging`), `expo-notifications`, APNs | `messaging/11-notifications` |
+| 💥 Crash reporting | Sentry, Firebase **Crashlytics** | `observability/17` |
+| 📊 Product analytics | **Amplitude**, Firebase **Analytics** | `observability/17` |
+| ⚡ Performance / APM | Datadog, Firebase **Performance** | `observability/17` |
+| 🚩 Feature flags | LaunchDarkly | `platform/08-feature-flags` |
+| 🔐 Secure storage / tokens | `react-native-keychain` | `platform/09-secure-storage-keychain` |
+| 🎨 Theming / i18n | Context API, i18next | `ui/05-styling` |
 
-## 10. Store specific states in the local storage
+### Recommended folder structure
 
-- [ ] How to store specific states in the cache?
-- [ ] How to config the redux to do it?
+Feature-based, so a feature's UI, hooks, data and state live together (easy to navigate, easy to delete). Routes stay thin — they compose features.
 
-## 11. Components-Based dvelopment (CBD)
+```
+src/
+├── app/              # expo-router routes (thin — screens compose features)
+├── features/         # self-contained feature modules
+│   └── <feature>/
+│       ├── components/
+│       ├── hooks/
+│       ├── api/      # React Query queries/mutations
+│       ├── store/    # local Zustand slice (if needed)
+│       └── index.ts  # public surface of the feature
+├── components/       # shared UI / design-system primitives
+├── lib/              # cross-cutting: api client, storage, analytics, flags
+├── hooks/            # shared hooks
+├── store/            # global client state
+├── theme/            # theme tokens + ThemeProvider
+├── constants/
+└── types/
+```
 
-- [ ] How to use react-redux, RxJS to build reusable components. (It's not only a simple componente but also can be a complex product logic contains many pages which can be reused in multi cases)
+---
 
-## 13. The new architecture for iOS part
+## Topics
 
-- [ ] [Using cocoapods to manage native dependencies](https://sandstorm.de/de/blog/post/react-native-managing-native-dependencies-using-xcode-and-cocoapods.html)
+Deep-dive discussions in [`docs/`](./docs). Each is tradeoff-driven and (where relevant) links to real code in the companion demo apps.
 
-## 14. Animations in React Native
+| Area | Topic | Status |
+|---|---|---|
+| **State** | State management — Zustand vs Redux + RTK vs Context | 🚧 Planned |
+| **State** | Async actions — RTK Query vs React Query vs thunks/sagas/rxjs | 🚧 Planned |
+| **Data** | Data fetching — React Query patterns, cache, offline | 🚧 Planned |
+| **Data** | Storage & cache — AsyncStorage vs MMKV | 🚧 Planned |
+| **UI** | Styling — NativeWind vs StyleSheet vs styled-components | 🚧 Planned |
+| **UI** | Component libraries & design systems | 🚧 Planned |
+| **Navigation** | expo-router vs react-navigation; deep links (universal + in-app) | 🚧 Planned |
+| **Platform** | Feature flags — LaunchDarkly & alternatives | 🚧 Planned |
+| **Platform** | Secure storage — Keychain + optimization | 🚧 Planned |
+| **Platform** | Auth — Auth0, OpenID Connect, OAuth 2.0 / PKCE | 🚧 Planned |
+| **Messaging** | Notifications — Firebase/FCM, foreground vs background | 🚧 Planned |
+| **Quality** | Testing — unit (Jest/RNTL), E2E (Detox vs Maestro) | 🚧 Planned |
+| **Quality** | Debugging tools | 🚧 Planned |
+| **Delivery** | CI — Bitrise vs GitHub Actions vs EAS | 🚧 Planned |
+| **Delivery** | Deployment — Fastlane, EAS Build/Submit, OTA | 🚧 Planned |
+| **Delivery** | Bundle analysis & performance | 🚧 Planned |
+| **Observability** | Sentry, Amplitude, Firebase suite, Datadog | 🚧 Planned |
+| **Tooling** | AI tools for React Native development | 🚧 Planned |
 
-- [ ] [Animation libs in React Native](https://blog.bitsrc.io/top-5-animation-libraries-in-react-native-d00ec8ddfc8d)
+---
 
-## 15. Using TypeScript
+## Getting started
 
-- [ ] [Migrate to TypesSript](https://blog.usejournal.com/migrating-a-flow-react-native-app-to-typescript-c74c7bceae7d)
-- [ ] [Flow or TypeScript](https://areknawo.com/typescript-vs-flow-with-react-in-the-background/)
+```bash
+npm install
+npx expo start        # then press i (iOS) / a (Android) / w (web)
+```
 
-## 16. Integrating app analytics tool: Mixpanel
+## Tech stack baseline
 
-- [ ] Using react-native-mixpanel
-- [ ] Send actions with epics
-
-## 17. Localisation
-
-- [ ] [Using i18n](https://medium.com/@nicolas.kovacs/react-native-localize-and-i18n-js-117f09428017)
-
-## * Common debug errors
-
-- [ ] List of common errors when developing and debugging React Native app.
-- [ ] Many problems related to specific React Native version.
-
-## * Using GraphQL in React Native
-
-- [GraphQL in React Native](https://pusher.com/tutorials/learning-graphql-react-native)
-- [Apollo docs](https://www.apollographql.com/docs/react/integrations/react-native/)
-- [Client server](https://hasura.io/learn/graphql/react-native/introduction/)
+| Layer | Choice |
+|---|---|
+| Framework | Expo SDK 56, React Native 0.85, React 19 |
+| Language | TypeScript |
+| Architecture | New Architecture (Fabric / TurboModules / Bridgeless), React Compiler |
+| Routing | expo-router (typed routes) |
